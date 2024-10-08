@@ -26,7 +26,7 @@ def analyze_code():
         try:
             # Adjust the API call according to the latest version (>= 1.0.0)
             response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",  # Use "gpt-4" if you have access
+                model="gpt-4o",  # Use "gpt-4" if you have access
                 messages=messages,
                 max_tokens=500,
                 temperature=0.5,
