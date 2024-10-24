@@ -6,6 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, request, jsonify
 from datetime import datetime
 from flask_migrate import Migrate
+from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv(find_dotenv())
 os.environ['OPENAI_API_KEY'] =  os.environ.get("OPEN_AI")
@@ -25,8 +26,20 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def password(self):
+        raise AttributeError('password is not a readable attribute')
+
+    @password.setter
+    def password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def verify_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -74,10 +87,19 @@ def analyze_code():
 def create_user():
     data = request.get_json()
     
+    required_fields = ['username', 'email', 'password']
+    if not all(field in data for field in required_fields):
+        return jsonify({
+            'error': 'Missing required fields',
+            'required_fields': required_fields
+        }), 400
+
     new_user = User(
         username=data['username'],
         email=data['email']
     )
+    
+    new_user.password = data['password']
     
     try:
         db.session.add(new_user)
