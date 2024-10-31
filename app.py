@@ -7,11 +7,20 @@ from flask import Flask, request, jsonify
 from datetime import datetime
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_restx import Api, Resource, fields
 
 load_dotenv(find_dotenv())
 os.environ['OPENAI_API_KEY'] =  os.environ.get("OPEN_AI")
 
 app = Flask(__name__)
+# api = Api(app, 
+#     version='1.0.0',
+#     title='codeguardai',
+#     description='API para servicios de codeguardai',
+#     doc='/swagger'
+# )
+
+# ns = api.namespace('crud', description='CRUD operations')
 openai.api_key = os.getenv("OPENAI_KEY")
 
 # Postgresql
@@ -51,7 +60,6 @@ class User(db.Model):
             'email': self.email,
             'created_at': self.created_at.isoformat()
         }
-
 @app.route('/', methods=['GET', 'POST'])
 def analyze_code():
     if request.method == 'POST':
@@ -109,11 +117,14 @@ def create_user():
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
 
+@ns.route('/users')
 @app.route('/users', methods=['GET'])
 def get_users():
     users = User.query.all()
     return jsonify([user.to_dict() for user in users])
 
+@ns.route('/users/<int:id>')
+@ns.param('id', 'The user identifier')
 @app.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
     user = User.query.get_or_404(user_id)
