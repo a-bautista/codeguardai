@@ -85,7 +85,6 @@ user_input_model = api.model('UserInput', {
 })
 
 @ns.route('/')
-@ns.route('/')
 class AnalyzeCode(Resource):
     @ns.doc('analyze_code')
     @ns.expect(code_analysis_model)
