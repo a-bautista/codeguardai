@@ -13,14 +13,14 @@ load_dotenv(find_dotenv())
 os.environ['OPENAI_API_KEY'] =  os.environ.get("OPEN_AI")
 
 app = Flask(__name__)
-# api = Api(app, 
-#     version='1.0.0',
-#     title='codeguardai',
-#     description='API para servicios de codeguardai',
-#     doc='/swagger'
-# )
+api = Api(app, 
+    version='1.0.0',
+    title='codeguardai',
+    description='API para servicios de codeguardai',
+    doc='/swagger'
+)
 
-# ns = api.namespace('crud', description='CRUD operations')
+ns = api.namespace('crud', description='CRUD operations')
 openai.api_key = os.getenv("OPENAI_KEY")
 
 # Postgresql
@@ -60,10 +60,41 @@ class User(db.Model):
             'email': self.email,
             'created_at': self.created_at.isoformat()
         }
-@app.route('/', methods=['GET', 'POST'])
-def analyze_code():
-    if request.method == 'POST':
-        code_snippet = request.form['code']
+    
+# swagger models
+user_model = api.model('User', {
+    'id': fields.Integer(readonly=True, description='User identifier'),
+    'username': fields.String(required=True, description='Username'),
+    'email': fields.String(required=True, description='User email'),
+    'created_at': fields.DateTime(readonly=True, description='Account creation date')
+})
+
+code_analysis_model = api.model('CodeAnalysis', {
+    'code': fields.String(required=True, description='Code snippet to analyze'),
+})
+
+code_analysis_response = api.model('CodeAnalysisResponse', {
+    'code': fields.String(description='Original code snippet'),
+    'analysis': fields.String(description='Analysis result')
+})
+
+user_input_model = api.model('UserInput', {
+    'username': fields.String(required=True, description='Username'),
+    'password': fields.String(required=True, description='Password'),
+    'email': fields.String(required=True, description='User email')
+})
+
+@ns.route('/')
+@ns.route('/')
+class AnalyzeCode(Resource):
+    @ns.doc('analyze_code')
+    @ns.expect(code_analysis_model)
+    @ns.marshal_with(code_analysis_response)
+
+
+    def post(self):
+        """Analyze code snippet"""
+        code_snippet = request.json.get('code')
 
         messages = [
             {
@@ -75,7 +106,6 @@ def analyze_code():
                 "content": code_snippet
             }
         ]
-
         try:
             response = openai.chat.completions.create(
                 model="gpt-4o", 
@@ -84,80 +114,72 @@ def analyze_code():
                 temperature=0.5,
             )
             analysis = response.choices[0].message.content.strip()
+            return {'code': code_snippet, 'analysis': analysis}
         except Exception as e:
-            analysis = f"An error occurred: {e}"
-
-        return render_template('result.html', code=code_snippet, analysis=analysis)
-    return render_template('index.html')
+            api.abort(500, f"An error occurred: {str(e)}")
 
 # CRUD routes
-@app.route('/users', methods=['POST'])
-def create_user():
-    data = request.get_json()
-    
-    required_fields = ['username', 'email', 'password']
-    if not all(field in data for field in required_fields):
-        return jsonify({
-            'error': 'Missing required fields',
-            'required_fields': required_fields
-        }), 400
-
-    new_user = User(
-        username=data['username'],
-        email=data['email']
-    )
-    
-    new_user.password = data['password']
-    
-    try:
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify(new_user.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
 @ns.route('/users')
-@app.route('/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-    return jsonify([user.to_dict() for user in users])
+class UserList(Resource):
+    @ns.doc('list_users')
+    @ns.marshal_list_with(user_model)
+    def get(self):
+        """List all users"""
+        users = User.query.all()
+        return [user.to_dict() for user in users]
+
+    @ns.doc('create_user')
+    @ns.expect(user_input_model)
+    @ns.marshal_with(user_model, code=201)
+    def post(self):
+        """Create a new user"""
+        data = request.json
+        user = User(
+            username=data['username'],
+            email=data['email']
+        )
+        user.password = data['password']
+        try:
+            db.session.add(user)
+            db.session.commit()
+            return user.to_dict(), 201
+        except Exception as e:
+            db.session.rollback()
+            api.abort(400, f"Error creating user: {str(e)}")
+
+# @ns.route('/users')
+# @app.route('/users', methods=['GET'])
+# def get_users():
+#     users = User.query.all()
+#     return jsonify([user.to_dict() for user in users])
+
 
 @ns.route('/users/<int:id>')
 @ns.param('id', 'The user identifier')
-@app.route('/users/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    user = User.query.get_or_404(user_id)
-    return jsonify(user.to_dict())
+class UserResource(Resource):
+    @ns.doc('get_user')
+    @ns.marshal_with(user_model)
+    def get(self, id):
+        """Get a user by ID"""
+        user = User.query.get_or_404(id)
+        return user.to_dict()
 
-@app.route('/users/<int:user_id>', methods=['PUT'])
-def update_user(user_id):
-    user = User.query.get_or_404(user_id)
-    data = request.get_json()
-    
-    try:
-        if 'username' in data:
-            user.username = data['username']
-        if 'email' in data:
-            user.email = data['email']
-            
-        db.session.commit()
-        return jsonify(user.to_dict())
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+    @ns.doc('delete_user')
+    @ns.response(204, 'User deleted')
+    def delete(self, id):
+        """Delete a user"""
+        user = User.query.get_or_404(id)
+        try:
+            db.session.delete(user)
+            db.session.commit()
+            return '', 204
+        except Exception as e:
+            db.session.rollback()
+            api.abort(500, f"Error deleting user: {str(e)}")
 
-@app.route('/users/<int:user_id>', methods=['DELETE'])
-def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    
-    try:
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify({'message': 'User deleted successfully'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+@app.route('/users')
+def index():
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
