@@ -46,6 +46,13 @@ class UserSchema(Schema):
 class UserCreateSchema(UserSchema):
     password = ma_fields.Str(required=True, load_only=True)
 
+class UserUpdateSchema(Schema):
+    username = ma_fields.Str()
+    email = ma_fields.Email()
+
+class MessageSchema(Schema):
+    message = ma_fields.Str(required=True)
+
 # Database model
 class User(db.Model):
     __tablename__ = 'users'
@@ -74,34 +81,6 @@ blp = Blueprint(
     description='CRUD operations'
 )
 
-
-@app.route('/analyze', methods=['GET', 'POST'])
-def analyze_code():
-    if request.method == 'POST':
-        code_snippet = request.form['code']
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a code analysis assistant. Analyze the following code for potential improvements or bugs."
-            },
-            {
-                "role": "user",
-                "content": code_snippet
-            }
-        ]
-        try:
-            response = openai.chat.completions.create(
-                model="gpt-4o", 
-                messages=messages,
-                max_tokens=500,
-                temperature=0.5,
-            )
-            analysis = response.choices[0].message.content.strip()
-            return {'code': code_snippet, 'analysis': analysis}
-        except Exception as e:
-            api.abort(500, f"An error occurred: {str(e)}")
-
 @blp.route('/')
 class UserList(MethodView):
     @blp.response(200, UserSchema(many=True))
@@ -128,8 +107,76 @@ class UserList(MethodView):
             db.session.rollback()
             abort(400, message=str(e))
 
+@blp.route('/<int:user_id>')
+class UserResource(MethodView):
+    @blp.response(200, UserSchema)
+    @blp.response(404, MessageSchema)
+    def get(self, user_id):
+        """Get a specific user by ID"""
+        user = User.query.get_or_404(user_id)
+        return user
+
+    @blp.arguments(UserUpdateSchema)
+    @blp.response(200, UserSchema)
+    @blp.response(404, MessageSchema)
+    def put(self, user_data, user_id):
+        """Update a user"""
+        user = User.query.get_or_404(user_id)
+        
+        try:
+            if 'username' in user_data:
+                user.username = user_data['username']
+            if 'email' in user_data:
+                user.email = user_data['email']
+                
+            db.session.commit()
+            return user
+        except Exception as e:
+            db.session.rollback()
+            abort(400, message=str(e))
+
+    @blp.response(200, MessageSchema)
+    @blp.response(404, MessageSchema)
+    def delete(self, user_id):
+        """Delete a user"""
+        user = User.query.get_or_404(user_id)
+        
+        try:
+            db.session.delete(user)
+            db.session.commit()
+            return {"message": "User deleted successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(400, message=str(e))
+
 # Register blueprint
 api.register_blueprint(blp)
+@app.route('/analyze', methods=['GET', 'POST'])
+def analyze_code():
+    if request.method == 'POST':
+        code_snippet = request.form['code']
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a code analysis assistant. Analyze the following code for potential improvements or bugs."
+            },
+            {
+                "role": "user",
+                "content": code_snippet
+            }
+        ]
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o", 
+                messages=messages,
+                max_tokens=500,
+                temperature=0.5,
+            )
+            analysis = response.choices[0].message.content.strip()
+            return {'code': code_snippet, 'analysis': analysis}
+        except Exception as e:
+            api.abort(500, f"An error occurred: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
