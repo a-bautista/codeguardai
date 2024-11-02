@@ -73,6 +73,13 @@ class User(db.Model):
     def verify_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+class Prompts(db.Model):
+    __tablename__ = 'prompts'
+    id = db.Column(db.Integer, primary_key=True)
+    prompt = db.Column(db.String(200), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+
 # Blueprint for CRUD operations
 blp = Blueprint(
     'crud', 'crud',
