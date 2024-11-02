@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, request, session, render_template, redirect, url_for, flash
 from flask.views import MethodView
 import openai
 import os
@@ -9,6 +9,8 @@ from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_smorest import Api, Blueprint, abort
 from marshmallow import Schema, fields as ma_fields
+from functools import wraps
+
 
 load_dotenv(find_dotenv())
 os.environ['OPENAI_API_KEY'] = os.environ.get("OPEN_AI")
@@ -49,9 +51,6 @@ class UserCreateSchema(UserSchema):
 class UserUpdateSchema(Schema):
     username = ma_fields.Str()
     email = ma_fields.Email()
-
-class MessageSchema(Schema):
-    message = ma_fields.Str(required=True)
 
 # Database model
 class User(db.Model):
@@ -105,23 +104,25 @@ class UserList(MethodView):
             return new_user
         except Exception as e:
             db.session.rollback()
-            abort(400, message=str(e))
+            abort(400, message={"error": str(e)})
 
 @blp.route('/<int:user_id>')
 class UserResource(MethodView):
     @blp.response(200, UserSchema)
-    @blp.response(404, MessageSchema)
     def get(self, user_id):
         """Get a specific user by ID"""
-        user = User.query.get_or_404(user_id)
+        user = User.query.get(user_id)
+        if not user:
+            abort(404, message={"error": "User not found"})
         return user
 
     @blp.arguments(UserUpdateSchema)
     @blp.response(200, UserSchema)
-    @blp.response(404, MessageSchema)
     def put(self, user_data, user_id):
         """Update a user"""
-        user = User.query.get_or_404(user_id)
+        user = User.query.get(user_id)
+        if not user:
+            abort(404, message={"error": "User not found"})
         
         try:
             if 'username' in user_data:
@@ -133,24 +134,27 @@ class UserResource(MethodView):
             return user
         except Exception as e:
             db.session.rollback()
-            abort(400, message=str(e))
+            abort(400, message={"error": str(e)})
 
-    @blp.response(200, MessageSchema)
-    @blp.response(404, MessageSchema)
+    @blp.response(204)
     def delete(self, user_id):
         """Delete a user"""
-        user = User.query.get_or_404(user_id)
+        user = User.query.get(user_id)
+        if not user:
+            abort(404, message={"error": "User not found"})
         
         try:
             db.session.delete(user)
             db.session.commit()
-            return {"message": "User deleted successfully"}
+            return ""
         except Exception as e:
             db.session.rollback()
-            abort(400, message=str(e))
+            abort(400, message={"error": str(e)})
 
 # Register blueprint
 api.register_blueprint(blp)
+
+# /analyze app route
 @app.route('/analyze', methods=['GET', 'POST'])
 def analyze_code():
     if request.method == 'POST':
@@ -177,6 +181,73 @@ def analyze_code():
             return {'code': code_snippet, 'analysis': analysis}
         except Exception as e:
             api.abort(500, f"An error occurred: {str(e)}")
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            abort(401, message="Authentication required")
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.verify_password(password):
+            session['user_id'] = user.id
+            session.permanent = True
+            flash('Successfully logged in!', 'success')
+            return redirect(url_for('index'))
+        
+        flash('Invalid username or password', 'error')
+    
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('templates/register.html')
+        
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists', 'error')
+            return render_template('templates/register.html')
+            
+        if User.query.filter_by(email=email).first():
+            flash('Email already exists', 'error')
+            return render_template('templates/register.html')
+        
+        new_user = User(username=username, email=email)
+        new_user.password = password
+        
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Registration successful! Please login.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred during registration', 'error')
+            
+    return render_template('register.html')
+
+@app.route('/')
+def index():
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        return render_template('index.html', user=user)
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

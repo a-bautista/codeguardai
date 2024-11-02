@@ -1,14 +1,16 @@
-<!doctype html>
-<html>
-<head>
-    <title>Code Analyzer</title>
-</head>
-<body>
-    <h1>Code Analyzer</h1>
-    <form method="post">
-        <label for="code">Enter your code snippet:</label><br><br>
-        <textarea name="code" rows="20" cols="80" placeholder="Paste your code here"></textarea><br><br>
-        <input type="submit" value="Analyze Code">
-    </form>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="text-center">
+    <h1 class="display-4">Welcome to CodeGuardAI</h1>
+    {% if session.get('user_id') %}
+        <p class="lead">Welcome back, {{ user.username }}!</p>
+    {% else %}
+        <p class="lead">Please login or register to get started.</p>
+        <div class="mt-4">
+            <a href="{{ url_for('login') }}" class="btn btn-primary me-2">Login</a>
+            <a href="{{ url_for('register') }}" class="btn btn-secondary">Register</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
