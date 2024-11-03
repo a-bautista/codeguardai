@@ -68,7 +68,9 @@ class UserUpdateSchema(Schema):
 
 class PromptSchema(Schema):
     id = ma_fields.Int(dump_only=True)
+    user_id = ma_fields.Int(required=True)
     prompt = ma_fields.Str(required=True)
+    response = ma_fields.Str(required=True)
     created_at = ma_fields.DateTime(dump_only=True)
 
 # define database models
@@ -98,7 +100,7 @@ class Prompts(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) 
     prompt = db.Column(db.String(10000), unique=False, nullable=False)
-    response = db.Column(db.String(20000), unique=False, nullable=False)
+    response = db.Column(db.String(12000), unique=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
   
 # Route: Users
@@ -311,6 +313,7 @@ def index():
 def analyze_code():
     if request.method == 'GET':
         return render_template('analyze.html')
+        #return redirect(url_for('analyze_code'))
     
     if request.method == 'POST':
         if 'user_id' in session:
@@ -335,12 +338,12 @@ def analyze_code():
                 max_tokens=500,
                 temperature=0.5,
             )
-            print(user.id)
+            
             analysis = response.choices[0].message.content.strip()
             new_prompt = Prompts(user_id=user.id, prompt=code_snippet, response=analysis)
             db.session.add(new_prompt)
             db.session.commit()
-            return {'code': code_snippet, 'analysis': analysis}
+            return render_template('result.html', code=code_snippet, analysis=analysis)
         
         except Exception as e:
             db.session.rollback()
