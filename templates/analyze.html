@@ -5,6 +5,11 @@
 </head>
 <body>
     <h1>Code Analyzer</h1>
+    <ul class="navbar-nav ms-auto">
+        <li class="nav-item">
+            <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+        </li>
+    </ul>
     <form method="post">
         <label for="code">Enter your code snippet:</label><br><br>
         <textarea name="code" rows="20" cols="80" placeholder="Paste your code here"></textarea><br><br>
