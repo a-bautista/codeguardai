@@ -1,8 +1,6 @@
-<!doctype html>
-<html>
-<head>
-    <title>Analysis Result</title>
-</head>
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+{% block content %}
 <body>
     <h1>Analysis Result</h1>
     <h2>Your Code:</h2>
@@ -10,6 +8,6 @@
     <h2>Analysis:</h2>
     <pre>{{ analysis }}</pre>
     <br>
-    <a href="/">Analyze another code snippet</a>
+    <a href="{{ url_for('analyze_code') }}">Analyze another code snippet</a>
 </body>
-</html>
+{% endblock %}

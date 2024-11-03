@@ -4,19 +4,27 @@ import openai
 import os
 from dotenv import load_dotenv, find_dotenv
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_smorest import Api, Blueprint, abort
 from marshmallow import Schema, fields as ma_fields
 from functools import wraps
 
+# look for credentials OpenAI
 load_dotenv(find_dotenv())
-os.environ['OPENAI_API_KEY'] = os.environ.get("OPEN_AI")
+# get the secret from the .env file
+os.environ['OPENAI_API_KEY'] = os.environ.get("OPEN_AI") 
 
+# initiate flask app
 app = Flask(__name__)
 
-# Configure API with OpenAPI 3.0
+# set up the secret key for the login and define the lifetime of the session
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+app.permanent_session_lifetime = timedelta(days=1)
+
+
+# configure API with OpenAPI 3.0
 app.config["API_TITLE"] = "codeguardai"
 app.config["API_VERSION"] = "1.0.0"
 app.config["OPENAPI_VERSION"] = "3.0.0"
@@ -60,18 +68,21 @@ class UserUpdateSchema(Schema):
 
 class PromptSchema(Schema):
     id = ma_fields.Int(dump_only=True)
+    user_id = ma_fields.Int(required=True)
     prompt = ma_fields.Str(required=True)
+    response = ma_fields.Str(required=True)
     created_at = ma_fields.DateTime(dump_only=True)
 
-# Database model
+# define database models
 class User(db.Model):
-    __tablename__ = 'users'
+    __tablename__ = 'user'
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    prompts = db.relationship('Prompts', backref='user', lazy=True)
 
     @property
     def password(self):
@@ -85,12 +96,14 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
 class Prompts(db.Model):
-    __tablename__ = 'prompts'
+    __tablename__ = 'prompt'
     id = db.Column(db.Integer, primary_key=True)
-    prompt = db.Column(db.String(200), unique=False, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) 
+    prompt = db.Column(db.String(10000), unique=False, nullable=False)
+    response = db.Column(db.String(12000), unique=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-
+  
+# Route: Users
 @blp.route('/users')
 class UserList(MethodView):
     @blp.response(200, UserSchema(many=True))
@@ -129,7 +142,7 @@ class UserResource(MethodView):
 
     @blp.arguments(UserUpdateSchema)
     @blp.response(200, UserSchema)
-    def put(self, user_data, user_id):
+    def patch(self, user_data, user_id):
         """Update a user"""
         user = User.query.get(user_id)
         if not user:
@@ -162,6 +175,7 @@ class UserResource(MethodView):
             db.session.rollback()
             abort(400, message={"error": str(e)})
 
+# Route: Prompts
 @blp.route('/prompts')
 class PromptList(MethodView):
     @blp.response(200, PromptSchema(many=True))
@@ -211,37 +225,7 @@ class PromptResource(MethodView):
             db.session.rollback()
             abort(400, message={"error": str(e)})   
 
-# Register blueprint
-api.register_blueprint(blp)
-
-# /analyze app route
-@app.route('/analyze', methods=['GET', 'POST'])
-def analyze_code():
-    if request.method == 'POST':
-        code_snippet = request.form['code']
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a code analysis assistant. Analyze the following code for potential improvements or bugs."
-            },
-            {
-                "role": "user",
-                "content": code_snippet
-            }
-        ]
-        try:
-            response = openai.chat.completions.create(
-                model="gpt-4o", 
-                messages=messages,
-                max_tokens=500,
-                temperature=0.5,
-            )
-            analysis = response.choices[0].message.content.strip()
-            return {'code': code_snippet, 'analysis': analysis}
-        except Exception as e:
-            api.abort(500, f"An error occurred: {str(e)}")
-
+# Registration and login
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -252,6 +236,9 @@ def login_required(f):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if 'user_id' in session:
+        return redirect(url_for('analyze_code'))
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -262,14 +249,23 @@ def login():
             session['user_id'] = user.id
             session.permanent = True
             flash('Successfully logged in!', 'success')
-            return redirect(url_for('index'))
+            return redirect(url_for('analyze_code')) # redirect to the function
         
         flash('Invalid username or password', 'error')
-    
     return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    if 'user_id' in session:
+        session.clear()
+        flash('Successfully logged out!', 'success')
+    return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    if 'user_id' in session:
+        return redirect(url_for('analyze_code'))
+
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
@@ -302,6 +298,7 @@ def register():
             
     return render_template('register.html')
 
+# main page
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -309,71 +306,51 @@ def index():
         return render_template('index.html', user=user)
     return render_template('index.html')
 
-# CRUD routes
-@app.route('/users', methods=['POST'])
-def create_user():
-    data = request.get_json()
-    
-    required_fields = ['username', 'email', 'password']
-    if not all(field in data for field in required_fields):
-        return jsonify({
-            'error': 'Missing required fields',
-            'required_fields': required_fields
-        }), 400
 
-    new_user = User(
-        username=data['username'],
-        email=data['email']
-    )
+# Route: analyze_code
+@app.route('/analyze_code', methods=['GET', 'POST'])
+@login_required
+def analyze_code():
+    if request.method == 'GET':
+        return render_template('analyze.html')
+        #return redirect(url_for('analyze_code'))
     
-    new_user.password = data['password']
-    
-    try:
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify(new_user.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+    if request.method == 'POST':
+        if 'user_id' in session:
+            user = User.query.get(session['user_id'])
 
-@app.route('/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-    return jsonify([user.to_dict() for user in users])
+        code_snippet = request.form['code']
 
-@app.route('/users/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    user = User.query.get_or_404(user_id)
-    return jsonify(user.to_dict())
-
-@app.route('/users/<int:user_id>', methods=['PUT'])
-def update_user(user_id):
-    user = User.query.get_or_404(user_id)
-    data = request.get_json()
-    
-    try:
-        if 'username' in data:
-            user.username = data['username']
-        if 'email' in data:
-            user.email = data['email']
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a code analysis assistant. Analyze the following code for potential improvements or bugs."
+            },
+            {
+                "role": "user",
+                "content": code_snippet
+            }
+        ]
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o", 
+                messages=messages,
+                max_tokens=500,
+                temperature=0.5,
+            )
             
-        db.session.commit()
-        return jsonify(user.to_dict())
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+            analysis = response.choices[0].message.content.strip()
+            new_prompt = Prompts(user_id=user.id, prompt=code_snippet, response=analysis)
+            db.session.add(new_prompt)
+            db.session.commit()
+            return render_template('result.html', code=code_snippet, analysis=analysis)
+        
+        except Exception as e:
+            db.session.rollback()
+            abort(400, message={"error": str(e)})
 
-@app.route('/users/<int:user_id>', methods=['DELETE'])
-def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    
-    try:
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify({'message': 'User deleted successfully'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+# Register blueprint
+api.register_blueprint(blp)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
