@@ -1,0 +1,276 @@
+info:
+  title: codeguardai
+  version: 1.0.0
+servers:
+- url: https://virtserver.swaggerhub.com/A00973450_1/codeguardai/1.0.0
+  description: SwaggerHub API Auto Mocking
+tags:
+  - name: crud
+    description: CRUD operations
+openapi: 3.0.0
+paths:
+  /crud/users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      summary: List all users
+      tags:
+        - crud
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '422':
+          $ref: '#/components/responses/UNPROCESSABLE_ENTITY'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      summary: Create a new user
+      tags:
+        - crud
+  '/crud/users/{user_id}':
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      summary: Get a specific user by ID
+      tags:
+        - crud
+    put:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '422':
+          $ref: '#/components/responses/UNPROCESSABLE_ENTITY'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      summary: Update a user
+      tags:
+        - crud
+    delete:
+      responses:
+        '204':
+          description: No Content
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      summary: Delete a user
+      tags:
+        - crud
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+  /crud/prompts:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Prompt'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      summary: List all prompts
+      tags:
+        - crud
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prompt'
+        '422':
+          $ref: '#/components/responses/UNPROCESSABLE_ENTITY'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prompt'
+      summary: Create a new prompt
+      tags:
+        - crud
+  '/crud/prompts/{prompt_id}':
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prompt'
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      summary: Get a specific prompt by ID
+      tags:
+        - crud
+    delete:
+      responses:
+        '204':
+          description: No Content
+        default:
+          $ref: '#/components/responses/DEFAULT_ERROR'
+      summary: Delete a prompt
+      tags:
+        - crud
+    parameters:
+      - in: path
+        name: prompt_id
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: Error code
+        status:
+          type: string
+          description: Error name
+        message:
+          type: string
+          description: Error message
+        errors:
+          type: object
+          description: Errors
+          additionalProperties: {}
+    PaginationMetadata:
+      type: object
+      properties:
+        total:
+          type: integer
+        total_pages:
+          type: integer
+        first_page:
+          type: integer
+        last_page:
+          type: integer
+        page:
+          type: integer
+        previous_page:
+          type: integer
+        next_page:
+          type: integer
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+        - email
+        - username
+    UserCreate:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+        - email
+        - password
+        - username
+    UserUpdate:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+    Prompt:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        prompt:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+        - prompt
+  responses:
+    DEFAULT_ERROR:
+      description: Default error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UNPROCESSABLE_ENTITY:
+      description: Unprocessable Entity
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

@@ -37,6 +37,13 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 api = Api(app)
 
+# Blueprint for CRUD operations
+blp = Blueprint(
+    'crud', 'crud',
+    url_prefix='/crud',
+    description='CRUD operations'
+)
+
 # Define Marshmallow schemas
 class UserSchema(Schema):
     id = ma_fields.Int(dump_only=True)
@@ -80,18 +87,11 @@ class User(db.Model):
 class Prompts(db.Model):
     __tablename__ = 'prompts'
     id = db.Column(db.Integer, primary_key=True)
-    prompt = db.Column(db.String(200), unique=True, nullable=False)
+    prompt = db.Column(db.String(200), unique=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
 
-# Blueprint for CRUD operations
-blp = Blueprint(
-    'crud', 'crud',
-    url_prefix='/crud',
-    description='CRUD operations'
-)
-
-@blp.route('/')
+@blp.route('/users')
 class UserList(MethodView):
     @blp.response(200, UserSchema(many=True))
     def get(self):
@@ -117,56 +117,7 @@ class UserList(MethodView):
             db.session.rollback()
             abort(400, message={"error": str(e)})
 
-@blp.route('/get-prompts')
-class PromptList(MethodView):
-    @blp.response(200, PromptSchema(many=True))
-    def get(self):
-        """List all prompts"""
-        prompts = Prompts.query.all()
-        return prompts
-
-    @blp.arguments(PromptSchema)
-    @blp.response(201, PromptSchema)
-    def post(self, prompt_data):
-        """Create a new prompt"""
-        new_prompt = Prompts(
-            prompt=prompt_data['prompt']
-        )
-        
-        try:
-            db.session.add(new_prompt)
-            db.session.commit()
-            return new_prompt
-        except Exception as e:
-            db.session.rollback()
-            abort(400, message={"error": str(e)})
-
-@blp.route('/get-prompt/<int:prompt_id>')
-class PromptResource(MethodView):
-    @blp.response(200, PromptSchema)
-    def get(self, prompt_id):
-        """Get a specific prompt by ID"""
-        prompt = Prompts.query.get(prompt_id)
-        if not prompt:
-            abort(404, message={"error": "Prompt not found"})
-        return prompt
-
-    @blp.response(204)
-    def delete(self, prompt_id):
-        """Delete a prompt"""
-        prompt = Prompts.query.get(prompt_id)
-        if not prompt:
-            abort(404, message={"error": "Prompt not found"})
-        
-        try:
-            db.session.delete(prompt)
-            db.session.commit()
-            return ""
-        except Exception as e:
-            db.session.rollback()
-            abort(400, message={"error": str(e)})   
-
-@blp.route('/<int:user_id>')
+@blp.route('/users/<int:user_id>')
 class UserResource(MethodView):
     @blp.response(200, UserSchema)
     def get(self, user_id):
@@ -210,6 +161,55 @@ class UserResource(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(400, message={"error": str(e)})
+
+@blp.route('/prompts')
+class PromptList(MethodView):
+    @blp.response(200, PromptSchema(many=True))
+    def get(self):
+        """List all prompts"""
+        prompts = Prompts.query.all()
+        return prompts
+
+    @blp.arguments(PromptSchema)
+    @blp.response(201, PromptSchema)
+    def post(self, prompt_data):
+        """Create a new prompt"""
+        new_prompt = Prompts(
+            prompt=prompt_data['prompt']
+        )
+        
+        try:
+            db.session.add(new_prompt)
+            db.session.commit()
+            return new_prompt
+        except Exception as e:
+            db.session.rollback()
+            abort(400, message={"error": str(e)})
+
+@blp.route('/prompts/<int:prompt_id>')
+class PromptResource(MethodView):
+    @blp.response(200, PromptSchema)
+    def get(self, prompt_id):
+        """Get a specific prompt by ID"""
+        prompt = Prompts.query.get(prompt_id)
+        if not prompt:
+            abort(404, message={"error": "Prompt not found"})
+        return prompt
+
+    @blp.response(204)
+    def delete(self, prompt_id):
+        """Delete a prompt"""
+        prompt = Prompts.query.get(prompt_id)
+        if not prompt:
+            abort(404, message={"error": "Prompt not found"})
+        
+        try:
+            db.session.delete(prompt)
+            db.session.commit()
+            return ""
+        except Exception as e:
+            db.session.rollback()
+            abort(400, message={"error": str(e)})   
 
 # Register blueprint
 api.register_blueprint(blp)
