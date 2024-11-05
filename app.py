@@ -338,8 +338,8 @@ def analyze_code():
         ]
 
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4", 
+            response = openai.chat.completions.create(
+                model="gpt-4o", 
                 messages=messages,
                 max_tokens=500,
                 temperature=0.5,
