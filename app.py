@@ -12,9 +12,7 @@ from marshmallow import Schema, fields as ma_fields
 from functools import wraps
 
 # look for credentials OpenAI
-load_dotenv(find_dotenv())
-# get the secret from the .env file
-os.environ['OPENAI_API_KEY'] = os.environ.get("OPEN_AI") 
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 # initiate flask app
 app = Flask(__name__)
@@ -37,8 +35,13 @@ app.config["OPENAPI_SERVERS"] = [
 ]
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/flask_db')
+database_url = os.getenv('DATABASE_URL')
+if database_url and database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 
 # Initialize extensions
 db = SQLAlchemy(app)
@@ -355,8 +358,14 @@ def analyze_code():
             db.session.rollback()
             abort(400, message={"error": str(e)})
 
+# Optionally, add a health check endpoint
+@app.route('/healthcheck')
+def healthcheck():
+    return {'status': 'healthy'}, 200
+
 # Register blueprint
 api.register_blueprint(blp)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
