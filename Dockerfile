@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY wait_for_db.py .
+
 # Copy entrypoint script and set permissions
 COPY entrypoint.sh .
 RUN sed -i 's/\r$//' entrypoint.sh && \

@@ -10,12 +10,33 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_smorest import Api, Blueprint, abort
 from marshmallow import Schema, fields as ma_fields
 from functools import wraps
+from extensions import db, migrate
 
 # look for credentials OpenAI
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# initiate flask app
-app = Flask(__name__)
+# Initialize extensions and configure the flask app
+def create_app():
+    app = Flask(__name__)
+    
+    # Configure database
+    database_url = os.getenv('DATABASE_URL')
+    if database_url and database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+    
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
+    
+    return app
+
+# Create the application instance
+app = create_app()
+api = Api(app)
 
 # set up the secret key for the login and define the lifetime of the session
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
@@ -33,20 +54,6 @@ app.config["OPENAPI_SERVERS"] = [
     {"url": "https://virtserver.swaggerhub.com/A00973450_1/codeguardai/1.0.0", "description": "SwaggerHub API Auto Mocking"},
     {"url": "http://localhost:5001", "description": "Local Development Server"}
 ]
-
-# Database configuration
-database_url = os.getenv('DATABASE_URL')
-if database_url and database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-
-# Initialize extensions
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
-api = Api(app)
 
 # Blueprint for CRUD operations
 blp = Blueprint(
