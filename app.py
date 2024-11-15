@@ -322,7 +322,7 @@ def analyze_code():
         corporate_rules = request.form.get('rules', '')  # Obtener las reglas corporativas del formulario
 
         # Construir el mensaje del sistema con o sin las reglas corporativas
-        system_message = "You are a code analysis assistant. Analyze the following code for potential improvements or bugs."
+        system_message = "You are a code analysis assistant. Analyze the following code for potential improvements or bugs. You must categorize the bugs or errors from a scale of 1 to 3, where 1 indicates a sever error that MUST be fixed to allow the program to run smoothly while 3 indicates a non optimal code that could be improved upon. For level 1 errors, suggest a solution that keeps the code original functionality."
         if corporate_rules.strip():
             system_message += f" Follow these corporate rules or standards: {corporate_rules.strip()}"
 
