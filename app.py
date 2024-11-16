@@ -27,33 +27,33 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+
+    # configure OpenAPI
+    app.config["API_TITLE"] = "codeguardai"
+    app.config["API_VERSION"] = "1.0.0"
+    app.config["OPENAPI_VERSION"] = "3.0.0"
+    app.config["OPENAPI_URL_PREFIX"] = "/"
+    app.config["OPENAPI_SWAGGER_UI_PATH"] = "/swagger"
+    app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
+    app.config["OPENAPI_SERVERS"] = [
+        {"url": "https://virtserver.swaggerhub.com/A00973450_1/codeguardai/1.0.0", "description": "SwaggerHub API Auto Mocking"},
+        {"url": "http://localhost:5001", "description": "Local Development Server"}
+    ]
     
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    api = Api(app)
     
-    return app
-
-# Create the application instance
-app = create_app()
-api = Api(app)
+    return app, api
+    
+# Create the application instance and API
+app, api = create_app()
 
 # set up the secret key for the login and define the lifetime of the session
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 app.permanent_session_lifetime = timedelta(days=1)
 
-
-# configure API with OpenAPI 3.0
-app.config["API_TITLE"] = "codeguardai"
-app.config["API_VERSION"] = "1.0.0"
-app.config["OPENAPI_VERSION"] = "3.0.0"
-app.config["OPENAPI_URL_PREFIX"] = "/"
-app.config["OPENAPI_SWAGGER_UI_PATH"] = "/swagger"
-app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
-app.config["OPENAPI_SERVERS"] = [
-    {"url": "https://virtserver.swaggerhub.com/A00973450_1/codeguardai/1.0.0", "description": "SwaggerHub API Auto Mocking"},
-    {"url": "http://localhost:5001", "description": "Local Development Server"}
-]
 
 # Blueprint for CRUD operations
 blp = Blueprint(
@@ -332,7 +332,7 @@ def analyze_code():
         corporate_rules = request.form.get('rules', '')  # Obtener las reglas corporativas del formulario
 
         # Construir el mensaje del sistema con o sin las reglas corporativas
-        system_message = "You are a code analysis assistant. Analyze the following code for potential improvements or bugs."
+        system_message = "You are a code analysis assistant. Analyze the following code for potential improvements or bugs. You must categorize the bugs or errors from a scale of 1 to 3, where 1 indicates a sever error that MUST be fixed to allow the program to run smoothly while 3 indicates a non optimal code that could be improved upon. For level 1 errors, suggest a solution that keeps the code original functionality."
         if corporate_rules.strip():
             system_message += f" Follow these corporate rules or standards: {corporate_rules.strip()}"
 
